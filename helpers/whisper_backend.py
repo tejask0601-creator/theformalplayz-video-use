@@ -67,19 +67,19 @@ def _read_wav(audio_path: Path):
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def call_whisper(
-    audio_path: Path,
-    language: str | None = None,
-    model: str | None = None,
-    device: str = "auto",
-    compute_type: str = "auto",
-) -> dict:
-    """Transcribe a 16 kHz mono wav. Returns a Scribe-shaped dict."""
-    model_size = model or DEFAULT_MODEL
-    m = _load_model(model_size, device, compute_type)
+DEFAULT_DEVICE = os.environ.get("VIDEO_USE_WHISPER_DEVICE", "auto")  # auto | cpu | cuda
 
+# Markers of a missing/broken GPU runtime (e.g. "Library cublas64_12.dll is not
+# found or cannot be loaded"). "auto" picks the GPU whenever one is detected,
+# even if the CUDA libraries are not installed, and fails only at first use.
+_GPU_ERROR_MARKERS = ("cublas", "cudnn", "cuda", ".dll", "libcu")
+_gpu_broken = False
+
+
+def _run(audio, language, model_size, device, compute_type):
+    m = _load_model(model_size, device, compute_type)
     segments, info = m.transcribe(
-        _read_wav(audio_path),
+        audio,
         language=language,
         word_timestamps=True,
         initial_prompt=VERBATIM_PROMPT,
@@ -105,6 +105,36 @@ def call_whisper(
             })
             texts.append(text)
             prev_end = w.end
+    return words, texts, info
+
+
+def call_whisper(
+    audio_path: Path,
+    language: str | None = None,
+    model: str | None = None,
+    device: str | None = None,
+    compute_type: str = "auto",
+) -> dict:
+    """Transcribe a 16 kHz mono wav. Returns a Scribe-shaped dict.
+
+    If the GPU runtime is broken (missing CUDA DLLs), falls back to CPU/int8
+    automatically and remembers that for the rest of the process.
+    """
+    global _gpu_broken
+    model_size = model or DEFAULT_MODEL
+    device = device or DEFAULT_DEVICE
+    audio = _read_wav(audio_path)
+
+    if _gpu_broken:
+        device, compute_type = "cpu", "int8"
+    try:
+        words, texts, info = _run(audio, language, model_size, device, compute_type)
+    except RuntimeError as e:
+        if device == "cpu" or not any(k in str(e).lower() for k in _GPU_ERROR_MARKERS):
+            raise
+        print(f"  note: GPU unavailable ({e}); falling back to CPU", flush=True)
+        _gpu_broken = True
+        words, texts, info = _run(audio, language, model_size, "cpu", "int8")
 
     return {
         "language_code": info.language,
