@@ -89,9 +89,13 @@ Figure out which agent you are running under, and register once. A symlink of th
 
 If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
 
-### 5. ElevenLabs API key
+### 5. Transcription backend
 
-Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
+**This install uses free local Whisper (`faster-whisper`) by default. No API key is needed; skip the rest of this step** unless the user wants hosted ElevenLabs Scribe (`--backend scribe`). `pip install -e .` already installs `faster-whisper`. Model weights (~500 MB for the default `small`) download from Hugging Face on the first transcription, so that first run needs internet. Whisper has no speaker diarization or audio events and may drop filler words.
+
+#### Optional: ElevenLabs API key (only for `--backend scribe`)
+
+Scribe (ElevenLabs) is the optional hosted backend.
 
 1. Check existing state in this order and stop at the first hit:
 

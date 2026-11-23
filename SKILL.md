@@ -59,7 +59,8 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 
 First-time install lives in `install.md` (clone, deps, ffmpeg, skill registration, API key). Don't re-run it every session; on cold start just verify:
 
-- `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
+- Transcription defaults to **local Whisper** (`faster-whisper`, free, no API key). Verify `python -c "import faster_whisper"` works. Model weights download on first use, so the first run needs internet. The hosted ElevenLabs backend is opt-in via `--backend scribe` (or `VIDEO_USE_BACKEND=scribe`) and then needs `ELEVENLABS_API_KEY` in the environment or in `.env` at the repo root. Don't ask the user for an ElevenLabs key unless they choose that backend.
+- Whisper has no speaker diarization or audio events (`(laughter)`), and it tends to drop fillers ("um", "uh") even with the verbatim prompt. Read `takes_packed.md` critically before cutting on fillers, and pad cut edges generously.
 - `ffmpeg` + `ffprobe` on PATH.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - Node.js + npm available if the session needs HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
@@ -71,8 +72,8 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 
 ## Helpers
 
-- **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
-- **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
+- **`transcribe.py <video>`** — single-file transcription. Local Whisper by default (`--model tiny|base|small|medium|large-v3`); `--backend scribe` for hosted ElevenLabs (`--num-speakers N` only applies there). Cached.
+- **`transcribe_batch.py <videos_dir>`** — batch transcription. 1 worker for Whisper, 4 for Scribe. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
@@ -328,7 +329,7 @@ Things that consistently fail regardless of style:
 - **Hierarchical pre-computed codec formats** with USABILITY / tone tags / shot layers. Over-engineering. Derive from the transcript at decision time.
 - **Hand-tuned moment-scoring functions.** The LLM picks better than any heuristic you'll write.
 - **Whisper SRT / phrase-level output.** Loses sub-second gap data. Always word-level verbatim.
-- **Running Whisper locally on CPU.** Slow and it normalizes fillers. Use hosted Scribe.
+- **Whisper's default behavior.** Slow on CPU and it normalizes fillers. This install uses local Whisper anyway by the user's choice, with a filler-heavy prompt to keep fillers; use `--model medium` or larger if accuracy matters and time allows. Hosted Scribe (`--backend scribe`) is the better-quality option if the user changes their mind.
 - **Burning subtitles into base before compositing overlays.** Overlays hide them. (Hard Rule 1.)
 - **Single-pass filtergraph when you have overlays.** Double re-encodes. Use per-segment extract → concat.
 - **Linear animation easing.** Looks robotic. Always cubic.
