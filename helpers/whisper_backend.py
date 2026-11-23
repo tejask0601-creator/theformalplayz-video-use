@@ -89,7 +89,13 @@ def _run(audio, language, model_size, device, compute_type):
     words: list[dict] = []
     texts: list[str] = []
     prev_end: float | None = None
+    total = len(audio) / 16000.0
+    next_report = 0.0
     for seg in segments:  # lazy generator: decoding happens here
+        if seg.end >= next_report:  # whisper is silent otherwise; show it is alive
+            print(f"  ... transcribed {seg.end:.0f}s / {total:.0f}s "
+                  f"({100 * seg.end / total:.0f}%)", flush=True)
+            next_report = seg.end + 30.0
         for w in seg.words or []:
             text = (w.word or "").strip()
             if not text:
