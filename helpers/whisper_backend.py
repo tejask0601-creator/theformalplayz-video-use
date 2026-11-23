@@ -49,6 +49,24 @@ def _load_model(model_size: str, device: str, compute_type: str):
         return _models[key]
 
 
+def _read_wav(audio_path: Path):
+    """Read our 16 kHz mono 16-bit wav into a float32 array in [-1, 1].
+
+    Passing an array makes faster-whisper skip its own audio decoder (PyAV),
+    whose open() signature has changed across versions and can raise
+    "open() got an unexpected keyword argument 'metadata_errors'".
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(audio_path), "rb") as w:
+        if w.getframerate() != 16000 or w.getnchannels() != 1 or w.getsampwidth() != 2:
+            raise RuntimeError("expected 16 kHz mono 16-bit wav from ffmpeg")
+        raw = w.readframes(w.getnframes())
+    return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def call_whisper(
     audio_path: Path,
     language: str | None = None,
@@ -61,7 +79,7 @@ def call_whisper(
     m = _load_model(model_size, device, compute_type)
 
     segments, info = m.transcribe(
-        str(audio_path),
+        _read_wav(audio_path),
         language=language,
         word_timestamps=True,
         initial_prompt=VERBATIM_PROMPT,
